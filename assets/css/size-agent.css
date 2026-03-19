@@ -1,1 +1,16 @@
+.size-agent-external {
+  margin: 12px 0;
+}
 
+.size-agent-status {
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #eef4ff;
+  color: #1d3557;
+}
+
+.size-agent-status.is-error {
+  background: #fff1f1;
+  color: #9b1c1c;
+}
