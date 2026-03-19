@@ -21,9 +21,8 @@ class Size_Agent_Frontend {
 	}
 
 	protected function get_widget_script_url() {
-		$settings = $this->get_settings();
-		return !empty($settings['widget_script_url']) ? esc_url_raw($settings['widget_script_url']) : '';
-	}
+	return 'https://nursing-shoes-size-agent.vercel.app/size-finder.js';
+}
 
 	protected function get_api_base_url() {
 		$settings = $this->get_settings();
