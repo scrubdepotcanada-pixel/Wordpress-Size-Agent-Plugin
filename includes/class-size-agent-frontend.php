@@ -24,11 +24,23 @@ class Size_Agent_Frontend {
 		add_action('wp_enqueue_scripts', array($this, 'register_assets'));
 
 		if ($this->should_inject_on_product_pages()) {
-			// Standard WooCommerce hook
+			// Method 1: Standard WooCommerce hooks
 			add_action('woocommerce_before_add_to_cart_button', array($this, 'render_product_page_container_once'));
-			// Elementor and page builder fallback hooks
 			add_action('woocommerce_single_product_summary', array($this, 'render_product_page_container_once'), 25);
 			add_action('woocommerce_after_add_to_cart_button', array($this, 'render_product_page_container_once'), 5);
+
+			// Method 2: Elementor widget render hook
+			add_filter('elementor/widget/render_content', array($this, 'inject_into_elementor_widget'), 10, 2);
+
+			// Method 3: the_content filter for product pages
+			add_filter('the_content', array($this, 'inject_into_content'), 50);
+
+			// Method 4: JavaScript injection fallback via wp_footer
+			add_action('wp_footer', array($this, 'inject_via_footer_script'));
+
+			// AJAX handler for JS injection
+			add_action('wp_ajax_size_agent_render', array($this, 'ajax_render'));
+			add_action('wp_ajax_nopriv_size_agent_render', array($this, 'ajax_render'));
 		}
 	}
 
@@ -36,6 +48,76 @@ class Size_Agent_Frontend {
 		if ($this->rendered) return;
 		$this->rendered = true;
 		$this->render_product_page_container();
+	}
+
+	// Method 2: Elementor widget hook
+	public function inject_into_elementor_widget($content, $widget) {
+		if ($this->rendered) return $content;
+		$name = $widget->get_name();
+		if ($name === 'woocommerce-product-add-to-cart' || $name === 'add-to-cart') {
+			$this->rendered = true;
+			$content .= do_shortcode('[size_agent]');
+		}
+		return $content;
+	}
+
+	// Method 3: the_content filter
+	public function inject_into_content($content) {
+		if ($this->rendered) return $content;
+		if (!is_singular('product')) return $content;
+		if (strpos($content, 'size-agent-external') !== false) return $content;
+		if (strpos($content, '[size_agent]') !== false) return $content;
+
+		$this->rendered = true;
+		$widget_html = do_shortcode('[size_agent]');
+
+		if (strpos($content, '</form>') !== false) {
+			$content = preg_replace('/(<\/form>)/i', '$1' . $widget_html, $content, 1);
+		} else {
+			$content .= $widget_html;
+		}
+		return $content;
+	}
+
+	// Method 4: JavaScript footer injection
+	public function inject_via_footer_script() {
+		if ($this->rendered) return;
+		if (!is_singular('product')) return;
+		$product_id = get_the_ID();
+		$ajax_url = admin_url('admin-ajax.php');
+		?>
+		<script>
+		(function() {
+			if (document.getElementById('size-agent-injected')) return;
+			var target = document.querySelector(
+				'.elementor-add-to-cart, form.cart, .single_add_to_cart_button'
+			);
+			if (!target) return;
+			var container = document.createElement('div');
+			container.id = 'size-agent-injected';
+			var insertAfter = target.closest('form') || target.closest('.elementor-widget') || target;
+			if (insertAfter && insertAfter.parentNode) {
+				insertAfter.parentNode.insertBefore(container, insertAfter.nextSibling);
+			}
+			fetch('<?php echo esc_url($ajax_url); ?>?action=size_agent_render&product_id=<?php echo intval($product_id); ?>')
+				.then(function(r) { return r.text(); })
+				.then(function(html) { container.innerHTML = html; });
+		})();
+		</script>
+		<?php
+	}
+
+	// AJAX handler for JS injection
+	public function ajax_render() {
+		$product_id = intval(isset($_GET['product_id']) ? $_GET['product_id'] : 0);
+		if ($product_id) {
+			global $post;
+			$post = get_post($product_id);
+			setup_postdata($post);
+			echo do_shortcode('[size_agent]');
+			wp_reset_postdata();
+		}
+		wp_die();
 	}
 
 	protected function get_settings() {
