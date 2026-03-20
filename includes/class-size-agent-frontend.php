@@ -17,12 +17,25 @@ class Size_Agent_Frontend {
 		'slipper', 'slippers', 'pump', 'pumps', 'oxford', 'oxfords',
 	);
 
+	// Tracks whether the widget has already been rendered to avoid duplicates
+	private $rendered = false;
+
 	public function init() {
 		add_action('wp_enqueue_scripts', array($this, 'register_assets'));
 
 		if ($this->should_inject_on_product_pages()) {
-			add_action('woocommerce_before_add_to_cart_button', array($this, 'render_product_page_container'));
+			// Standard WooCommerce hook
+			add_action('woocommerce_before_add_to_cart_button', array($this, 'render_product_page_container_once'));
+			// Elementor and page builder fallback hooks
+			add_action('woocommerce_single_product_summary', array($this, 'render_product_page_container_once'), 25);
+			add_action('woocommerce_after_add_to_cart_button', array($this, 'render_product_page_container_once'), 5);
 		}
+	}
+
+	public function render_product_page_container_once() {
+		if ($this->rendered) return;
+		$this->rendered = true;
+		$this->render_product_page_container();
 	}
 
 	protected function get_settings() {
