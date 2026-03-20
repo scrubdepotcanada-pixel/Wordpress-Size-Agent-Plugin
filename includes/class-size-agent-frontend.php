@@ -4,9 +4,18 @@ if (!defined('ABSPATH')) {
 }
 
 class Size_Agent_Frontend {
-	const SCRIPT_HANDLE        = 'size-agent-widget';
+	const SCRUBS_SCRIPT_HANDLE = 'size-agent-scrubs-widget';
+	const SHOES_SCRIPT_HANDLE  = 'size-agent-shoes-widget';
 	const LOADER_SCRIPT_HANDLE = 'size-agent-loader';
 	const STYLE_HANDLE         = 'size-agent-style';
+
+	// Keywords that identify a footwear product
+	const SHOE_KEYWORDS = array(
+		'shoe', 'shoes', 'boot', 'boots', 'sandal', 'sandals',
+		'clog', 'clogs', 'sneaker', 'sneakers', 'loafer', 'loafers',
+		'heel', 'heels', 'flat', 'flats', 'mule', 'mules',
+		'slipper', 'slippers', 'pump', 'pumps', 'oxford', 'oxfords',
+	);
 
 	public function init() {
 		add_action('wp_enqueue_scripts', array($this, 'register_assets'));
@@ -20,13 +29,52 @@ class Size_Agent_Frontend {
 		return Size_Agent_Settings::get_settings();
 	}
 
-	protected function get_widget_script_url() {
-	return 'https://nursing-shoes-size-agent.vercel.app/size-finder.js';
-}
+	/**
+	 * Detect whether a product is footwear or scrubs based on its title.
+	 * Returns 'shoes' or 'scrubs'.
+	 */
+	protected function detect_agent_type($product_title) {
+		if (empty($product_title)) {
+			return 'scrubs';
+		}
 
-	protected function get_api_base_url() {
+		$title_lower = strtolower($product_title);
+
+		foreach (self::SHOE_KEYWORDS as $keyword) {
+			if (strpos($title_lower, $keyword) !== false) {
+				return 'shoes';
+			}
+		}
+
+		return 'scrubs';
+	}
+
+	protected function get_widget_script_url($agent_type = 'scrubs') {
 		$settings = $this->get_settings();
-		return !empty($settings['api_base_url']) ? esc_url_raw($settings['api_base_url']) : '';
+
+		if ($agent_type === 'shoes') {
+			return !empty($settings['shoes_widget_script_url'])
+				? esc_url_raw($settings['shoes_widget_script_url'])
+				: '';
+		}
+
+		return !empty($settings['scrubs_widget_script_url'])
+			? esc_url_raw($settings['scrubs_widget_script_url'])
+			: '';
+	}
+
+	protected function get_api_base_url($agent_type = 'scrubs') {
+		$settings = $this->get_settings();
+
+		if ($agent_type === 'shoes') {
+			return !empty($settings['shoes_api_base_url'])
+				? esc_url_raw($settings['shoes_api_base_url'])
+				: '';
+		}
+
+		return !empty($settings['scrubs_api_base_url'])
+			? esc_url_raw($settings['scrubs_api_base_url'])
+			: '';
 	}
 
 	protected function should_inject_on_product_pages() {
@@ -39,8 +87,6 @@ class Size_Agent_Frontend {
 	}
 
 	public function register_assets() {
-		$widget_script_url = $this->get_widget_script_url();
-
 		wp_register_style(
 			self::STYLE_HANDLE,
 			SIZE_AGENT_PLUGIN_URL . 'assets/css/size-agent.css',
@@ -56,31 +102,51 @@ class Size_Agent_Frontend {
 			true
 		);
 
-		if (empty($widget_script_url)) {
-			return;
+		$scrubs_url = $this->get_widget_script_url('scrubs');
+		if (!empty($scrubs_url)) {
+			wp_register_script(
+				self::SCRUBS_SCRIPT_HANDLE,
+				$scrubs_url,
+				array(),
+				SIZE_AGENT_VERSION,
+				true
+			);
+			wp_script_add_data(self::SCRUBS_SCRIPT_HANDLE, 'defer', true);
 		}
 
-		wp_register_script(
-			self::SCRIPT_HANDLE,
-			$widget_script_url,
-			array(),
-			SIZE_AGENT_VERSION,
-			true
-		);
+		$shoes_url = $this->get_widget_script_url('shoes');
+		if (!empty($shoes_url)) {
+			wp_register_script(
+				self::SHOES_SCRIPT_HANDLE,
+				$shoes_url,
+				array(),
+				SIZE_AGENT_VERSION,
+				true
+			);
+			wp_script_add_data(self::SHOES_SCRIPT_HANDLE, 'defer', true);
+		}
 
-		wp_script_add_data(self::SCRIPT_HANDLE, 'defer', true);
 		wp_script_add_data(self::LOADER_SCRIPT_HANDLE, 'defer', true);
 	}
 
-	protected function enqueue_assets() {
-		$widget_script_url = $this->get_widget_script_url();
+	/**
+	 * Enqueue the correct widget script for the given agent type.
+	 * Returns false if the script URL is not configured.
+	 */
+	protected function enqueue_assets($agent_type = 'scrubs') {
+		$widget_script_url = $this->get_widget_script_url($agent_type);
 
 		if (empty($widget_script_url)) {
 			return false;
 		}
 
 		wp_enqueue_style(self::STYLE_HANDLE);
-		wp_enqueue_script(self::SCRIPT_HANDLE);
+
+		$handle = $agent_type === 'shoes'
+			? self::SHOES_SCRIPT_HANDLE
+			: self::SCRUBS_SCRIPT_HANDLE;
+
+		wp_enqueue_script($handle);
 		wp_enqueue_script(self::LOADER_SCRIPT_HANDLE);
 
 		return true;
@@ -115,8 +181,7 @@ class Size_Agent_Frontend {
 		$data['image']     = method_exists($product, 'get_image_id') && $product->get_image_id()
 			? (string) wp_get_attachment_url($product->get_image_id())
 			: '';
-
-		$data['brand'] = $this->detect_brand($data['id']);
+		$data['brand']     = $this->detect_brand($data['id']);
 
 		return $data;
 	}
@@ -142,10 +207,11 @@ class Size_Agent_Frontend {
 		return '';
 	}
 
-	protected function build_mount_config($product_context = array()) {
+	protected function build_mount_config($product_context = array(), $agent_type = 'scrubs') {
 		return array(
-			'apiUrl'  => trailingslashit($this->get_api_base_url()) . 'api/size',
-			'product' => array(
+			'agentType' => $agent_type,
+			'apiUrl'    => trailingslashit($this->get_api_base_url($agent_type)) . 'api/size',
+			'product'   => array(
 				'id'        => !empty($product_context['id']) ? (int) $product_context['id'] : 0,
 				'title'     => !empty($product_context['title']) ? (string) $product_context['title'] : '',
 				'sku'       => !empty($product_context['sku']) ? (string) $product_context['sku'] : '',
@@ -157,11 +223,19 @@ class Size_Agent_Frontend {
 	}
 
 	protected function render_container($container_id, $product_context = array()) {
-		if (!$this->enqueue_assets()) {
+		$agent_type = $this->detect_agent_type(
+			!empty($product_context['title']) ? $product_context['title'] : ''
+		);
+
+		if (!$this->enqueue_assets($agent_type)) {
+			// Debug: show a visible message if script URL is not configured
+			if (defined('WP_DEBUG') && WP_DEBUG) {
+				return '<div class="size-agent-status is-error">Size Agent: No widget script URL configured for agent type "' . esc_html($agent_type) . '".</div>';
+			}
 			return '';
 		}
 
-		$config = $this->build_mount_config($product_context);
+		$config = $this->build_mount_config($product_context, $agent_type);
 
 		wp_add_inline_script(
 			self::LOADER_SCRIPT_HANDLE,
