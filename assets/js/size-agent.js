@@ -1,15 +1,28 @@
 (function () {
+  /**
+   * Mount the correct agent widget into the container.
+   * config.agentType determines which global object to use:
+   *   'shoes'  → window.NursingShoesSizeAgent.mount()
+   *   'scrubs' → window.ScrubsSizeAgent.mount()  (default)
+   */
+  function getAgentObject(agentType) {
+    if (agentType === 'shoes') {
+      return window.NursingShoesSizeAgent || null;
+    }
+    return window.ScrubsSizeAgent || null;
+  }
+
   function mountIntoContainer(containerId, config, attempt) {
     var container = document.getElementById(containerId);
     if (!container) {
       return;
     }
 
-    if (
-      window.NursingShoesSizeAgent &&
-      typeof window.NursingShoesSizeAgent.mount === "function"
-    ) {
-      window.NursingShoesSizeAgent.mount(container, config || {});
+    var agentType = (config && config.agentType) ? config.agentType : 'scrubs';
+    var agent = getAgentObject(agentType);
+
+    if (agent && typeof agent.mount === 'function') {
+      agent.mount(container, config || {});
       return;
     }
 
@@ -29,15 +42,14 @@
     if (!queue.length) {
       return;
     }
-
     while (queue.length) {
       var item = queue.shift();
       mountIntoContainer(item.containerId, item.config, 0);
     }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", processQueue);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', processQueue);
   } else {
     processQueue();
   }
