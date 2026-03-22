@@ -114,7 +114,14 @@ class Size_Agent_Frontend {
 			if (insertAfter && insertAfter.parentNode) {
 				insertAfter.parentNode.insertBefore(container, insertAfter.nextSibling);
 			}
-			fetch('<?php echo esc_url($ajax_url); ?>?action=size_agent_render&product_id=<?php echo intval($product_id); ?>')
+			// Pass product title from DOM for correct agent detection
+			var productTitle = (
+				document.querySelector('.product_title') ||
+				document.querySelector('h1.elementor-heading-title') ||
+				document.querySelector('h1')
+			);
+			var titleText = productTitle ? encodeURIComponent(productTitle.innerText.trim()) : '';
+			fetch('<?php echo esc_url($ajax_url); ?>?action=size_agent_render&product_id=<?php echo intval($product_id); ?>&product_title=' + titleText)
 				.then(function(r) { return r.text(); })
 				.then(function(html) { container.innerHTML = html; });
 		})();
@@ -124,12 +131,27 @@ class Size_Agent_Frontend {
 
 	// AJAX handler for JS injection
 	public function ajax_render() {
-		$product_id = intval(isset($_GET['product_id']) ? $_GET['product_id'] : 0);
+		$product_id    = intval(isset($_GET['product_id']) ? $_GET['product_id'] : 0);
+		$product_title = isset($_GET['product_title']) ? sanitize_text_field(urldecode($_GET['product_title'])) : '';
+
 		if ($product_id) {
 			global $post;
 			$post = get_post($product_id);
 			setup_postdata($post);
-			echo do_shortcode('[size_agent]');
+
+			// Use passed title for agent detection, fallback to WooCommerce product name
+			if (empty($product_title)) {
+				$product = wc_get_product($product_id);
+				if ($product) {
+					$product_title = $product->get_name();
+				}
+			}
+
+			$agent_type   = $this->detect_agent_type($product_title);
+			$product_context = $this->get_current_product_context($product_id);
+			$container_id = 'size-agent-ajax-' . $product_id;
+
+			echo $this->render_container($container_id, $product_context);
 			wp_reset_postdata();
 		}
 		wp_die();
