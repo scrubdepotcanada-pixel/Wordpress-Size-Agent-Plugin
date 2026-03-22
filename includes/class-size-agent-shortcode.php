@@ -21,7 +21,7 @@ class Size_Agent_Shortcode {
 			return '';
 		}
 
-		$frontend = new Size_Agent_Frontend();
-		return $frontend->get_shortcode_markup($atts);
+		// Use the existing frontend instance to respect the $rendered guard
+		return Size_Agent_Frontend::instance()->get_shortcode_markup($atts);
 	}
 }
