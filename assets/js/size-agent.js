@@ -18,17 +18,34 @@
       return;
     }
 
+    // If already mounted by either polling or event, bail out
+    if (container.getAttribute('data-size-agent-mounted') === 'true') {
+      return;
+    }
+
     var agentType = (config && config.agentType) ? config.agentType : 'scrubs';
     var agent = getAgentObject(agentType);
 
     if (agent && typeof agent.mount === 'function') {
+      container.setAttribute('data-size-agent-mounted', 'true');
       agent.mount(container, config || {});
       return;
     }
 
-    if ((attempt || 0) >= 40) {
-      container.innerHTML =
-        '<div class="size-agent-status is-error">Size widget is temporarily unavailable.</div>';
+    // On first attempt, also listen for SizeAgentReady event as a fast path
+    if ((attempt || 0) === 0) {
+      window.addEventListener('SizeAgentReady', function handler() {
+        window.removeEventListener('SizeAgentReady', handler);
+        mountIntoContainer(containerId, config, 0);
+      });
+    }
+
+    if ((attempt || 0) >= 80) {
+      // Only show error if nothing has mounted yet
+      if (container.getAttribute('data-size-agent-mounted') !== 'true') {
+        container.innerHTML =
+          '<div class="size-agent-status is-error">Size widget is temporarily unavailable.</div>';
+      }
       return;
     }
 
