@@ -147,7 +147,7 @@ class Size_Agent_Frontend {
 				}
 			}
 
-			$agent_type   = $this->detect_agent_type($product_title);
+			$agent_type   = $this->detect_agent_type($product_title, $product_id);
 			$product_context = $this->get_current_product_context($product_id);
 			$container_id = 'size-agent-ajax-' . $product_id;
 
@@ -162,19 +162,32 @@ class Size_Agent_Frontend {
 	}
 
 	/**
-	 * Detect whether a product is footwear or scrubs based on its title.
+	 * Detect whether a product is footwear or scrubs based on title and categories.
 	 * Returns 'shoes' or 'scrubs'.
 	 */
-	protected function detect_agent_type($product_title) {
-		if (empty($product_title)) {
-			return 'scrubs';
+	protected function detect_agent_type($product_title, $product_id = 0) {
+		// Check title first
+		if (!empty($product_title)) {
+			$title_lower = strtolower($product_title);
+			foreach (self::SHOE_KEYWORDS as $keyword) {
+				if (strpos($title_lower, $keyword) !== false) {
+					return 'shoes';
+				}
+			}
 		}
 
-		$title_lower = strtolower($product_title);
-
-		foreach (self::SHOE_KEYWORDS as $keyword) {
-			if (strpos($title_lower, $keyword) !== false) {
-				return 'shoes';
+		// Check product categories as fallback
+		if ($product_id) {
+			$categories = get_the_terms($product_id, 'product_cat');
+			if (is_array($categories) && !is_wp_error($categories)) {
+				foreach ($categories as $cat) {
+					$cat_lower = strtolower($cat->name . ' ' . $cat->slug);
+					foreach (self::SHOE_KEYWORDS as $keyword) {
+						if (strpos($cat_lower, $keyword) !== false) {
+							return 'shoes';
+						}
+					}
+				}
 			}
 		}
 
@@ -349,7 +362,8 @@ class Size_Agent_Frontend {
 
 	protected function render_container($container_id, $product_context = array()) {
 		$agent_type = $this->detect_agent_type(
-			!empty($product_context['title']) ? $product_context['title'] : ''
+			!empty($product_context['title']) ? $product_context['title'] : '',
+			!empty($product_context['id']) ? $product_context['id'] : 0
 		);
 
 		if (!$this->enqueue_assets($agent_type)) {
