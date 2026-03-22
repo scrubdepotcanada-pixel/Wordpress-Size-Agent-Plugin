@@ -1,41 +1,80 @@
-<?php
-/**
- * Plugin Name: Size Agent
- * Description: AI-powered sizing widget for WooCommerce — supports scrubs and footwear.
- * Version: 1.7.0
- * Author: Size Agent
- * Text Domain: size-agent
- * Requires at least: 6.0
- * Requires PHP: 7.4
- */
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
-}
+(function () {
+  /**
+   * Mount the correct agent widget into the container.
+   * config.agentType determines which global object to use:
+   *   'shoes'  → window.NursingShoesSizeAgent.mount()
+   *   'scrubs' → window.ScrubsSizeAgent.mount()  (default)
+   */
+  function getAgentObject(agentType) {
+    if (agentType === 'shoes') {
+      return window.NursingShoesSizeAgent || null;
+    }
+    return window.ScrubsSizeAgent || null;
+  }
 
-define( 'SIZE_AGENT_VERSION', '1.1.0' );
-define( 'SIZE_AGENT_PLUGIN_FILE', __FILE__ );
-define( 'SIZE_AGENT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
-define( 'SIZE_AGENT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+  function mountIntoContainer(containerId, config, attempt) {
+    var container = document.getElementById(containerId);
+    if (!container) {
+      return;
+    }
 
-// ── GitHub Auto-Updater ──────────────────────────────────────────────────────
-// Uses Plugin Update Checker by YahnisElsts.
-// Library lives in: lib/plugin-update-checker/
-// GitHub repo must be PUBLIC for this to work without a token.
-$size_agent_puc = SIZE_AGENT_PLUGIN_DIR . 'lib/plugin-update-checker/plugin-update-checker.php';
-if ( file_exists( $size_agent_puc ) ) {
-	require_once $size_agent_puc;
+    // If already mounted by either polling or event, bail out
+    if (container.getAttribute('data-size-agent-mounted') === 'true') {
+      return;
+    }
 
-	$size_agent_updater = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
-		'https://github.com/scrubdepotcanada-pixel/Wordpress-Size-Agent-Plugin',
-		__FILE__,
-		'size-agent'
-	);
+    var agentType = (config && config.agentType) ? config.agentType : 'scrubs';
+    var agent = getAgentObject(agentType);
 
-	// Tell the updater to use GitHub Releases (tagged versions)
-	$size_agent_updater->getVcsApi()->enableReleaseAssets();
-}
-// ────────────────────────────────────────────────────────────────────────────
+    if (agent && typeof agent.mount === 'function') {
+      container.setAttribute('data-size-agent-mounted', 'true');
+      agent.mount(container, config || {});
+      return;
+    }
 
-require_once SIZE_AGENT_PLUGIN_DIR . 'includes/class-size-agent-plugin.php';
-register_activation_hook( __FILE__, array( 'Size_Agent_Plugin', 'activate' ) );
-Size_Agent_Plugin::instance();
+    // On first attempt, listen for SizeAgentReady event as a fast path
+    if ((attempt || 0) === 0) {
+      window.addEventListener('SizeAgentReady', function handler() {
+        window.removeEventListener('SizeAgentReady', handler);
+        mountIntoContainer(containerId, config, 0);
+      });
+    }
+
+    // After 80 attempts (20s), give up — but ONLY show error if nothing mounted
+    if ((attempt || 0) >= 80) {
+      if (container.getAttribute('data-size-agent-mounted') !== 'true') {
+        // Check one more time — the auto-init in size-finder.js may have
+        // rendered the widget outside this container (button near add-to-cart).
+        // If the button exists on page, the widget IS working — don't show error.
+        if (document.getElementById('ns-size-finder-btn')) {
+          container.style.display = 'none';
+          return;
+        }
+        container.innerHTML =
+          '<div class="size-agent-status is-error">Size widget is temporarily unavailable.</div>';
+      }
+      return;
+    }
+
+    window.setTimeout(function () {
+      mountIntoContainer(containerId, config, (attempt || 0) + 1);
+    }, 250);
+  }
+
+  function processQueue() {
+    var queue = window.SizeAgentMountQueue || [];
+    if (!queue.length) {
+      return;
+    }
+    while (queue.length) {
+      var item = queue.shift();
+      mountIntoContainer(item.containerId, item.config, 0);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', processQueue);
+  } else {
+    processQueue();
+  }
+})();
