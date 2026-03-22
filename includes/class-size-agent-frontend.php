@@ -113,7 +113,10 @@ class Size_Agent_Frontend {
 		?>
 		<script>
 		(function() {
+			// Bail if any size agent container already exists on page
 			if (document.getElementById('size-agent-injected')) return;
+			if (document.querySelector('.size-agent-external')) return;
+			if (document.getElementById('ns-size-finder-btn')) return;
 			var target = document.querySelector(
 				'.elementor-add-to-cart, form.cart, .single_add_to_cart_button'
 			);
