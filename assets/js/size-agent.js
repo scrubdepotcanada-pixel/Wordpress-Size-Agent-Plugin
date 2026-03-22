@@ -32,7 +32,7 @@
       return;
     }
 
-    // On first attempt, also listen for SizeAgentReady event as a fast path
+    // On first attempt, listen for SizeAgentReady event as a fast path
     if ((attempt || 0) === 0) {
       window.addEventListener('SizeAgentReady', function handler() {
         window.removeEventListener('SizeAgentReady', handler);
@@ -40,9 +40,16 @@
       });
     }
 
+    // After 80 attempts (20s), give up — but ONLY show error if nothing mounted
     if ((attempt || 0) >= 80) {
-      // Only show error if nothing has mounted yet
       if (container.getAttribute('data-size-agent-mounted') !== 'true') {
+        // Check one more time — the auto-init in size-finder.js may have
+        // rendered the widget outside this container (button near add-to-cart).
+        // If the button exists on page, the widget IS working — don't show error.
+        if (document.getElementById('ns-size-finder-btn')) {
+          container.style.display = 'none';
+          return;
+        }
         container.innerHTML =
           '<div class="size-agent-status is-error">Size widget is temporarily unavailable.</div>';
       }
