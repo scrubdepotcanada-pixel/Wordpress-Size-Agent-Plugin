@@ -18,7 +18,17 @@ class Size_Agent_Frontend {
 	);
 
 	// Tracks whether the widget has already been rendered to avoid duplicates
-	private $rendered = false;
+	// Static so it works across all instances (shortcode creates its own)
+	private static $rendered = false;
+
+	protected static $frontend_instance = null;
+
+	public static function instance() {
+		if (null === self::$frontend_instance) {
+			self::$frontend_instance = new self();
+		}
+		return self::$frontend_instance;
+	}
 
 	public function init() {
 		// Always register assets
@@ -61,18 +71,18 @@ class Size_Agent_Frontend {
 
 	public function render_product_page_container_once() {
 		if (!$this->should_render()) return;
-		if ($this->rendered) return;
-		$this->rendered = true;
+		if (self::$rendered) return;
+		self::$rendered = true;
 		$this->render_product_page_container();
 	}
 
 	// Elementor widget hook
 	public function inject_into_elementor_widget($content, $widget) {
 		if (!$this->should_render()) return $content;
-		if ($this->rendered) return $content;
+		if (self::$rendered) return $content;
 		$name = $widget->get_name();
 		if ($name === 'woocommerce-product-add-to-cart' || $name === 'add-to-cart') {
-			$this->rendered = true;
+			self::$rendered = true;
 			$content .= do_shortcode('[size_agent]');
 		}
 		return $content;
@@ -81,10 +91,10 @@ class Size_Agent_Frontend {
 	// the_content filter
 	public function inject_into_content($content) {
 		if (!$this->should_render()) return $content;
-		if ($this->rendered) return $content;
+		if (self::$rendered) return $content;
 		if (strpos($content, 'size-agent-external') !== false) return $content;
 		if (strpos($content, '[size_agent]') !== false) return $content;
-		$this->rendered = true;
+		self::$rendered = true;
 		$widget_html = do_shortcode('[size_agent]');
 		if (strpos($content, '</form>') !== false) {
 			$content = preg_replace('/(<\/form>)/i', '$1' . $widget_html, $content, 1);
@@ -97,7 +107,7 @@ class Size_Agent_Frontend {
 	// JavaScript footer injection — nuclear fallback
 	public function inject_via_footer_script() {
 		if (!$this->should_render()) return;
-		if ($this->rendered) return;
+		if (self::$rendered) return;
 		$product_id = get_the_ID();
 		$ajax_url = admin_url('admin-ajax.php');
 		?>
@@ -232,14 +242,7 @@ class Size_Agent_Frontend {
 			SIZE_AGENT_VERSION
 		);
 
-		wp_register_script(
-			self::LOADER_SCRIPT_HANDLE,
-			SIZE_AGENT_PLUGIN_URL . 'assets/js/size-agent.js',
-			array(),
-			SIZE_AGENT_VERSION,
-			true
-		);
-
+		// Register widget scripts first (no dependencies)
 		$scrubs_url = $this->get_widget_script_url('scrubs');
 		if (!empty($scrubs_url)) {
 			wp_register_script(
@@ -249,7 +252,6 @@ class Size_Agent_Frontend {
 				SIZE_AGENT_VERSION,
 				true
 			);
-			wp_script_add_data(self::SCRUBS_SCRIPT_HANDLE, 'defer', true);
 		}
 
 		$shoes_url = $this->get_widget_script_url('shoes');
@@ -261,10 +263,27 @@ class Size_Agent_Frontend {
 				SIZE_AGENT_VERSION,
 				true
 			);
-			wp_script_add_data(self::SHOES_SCRIPT_HANDLE, 'defer', true);
 		}
 
-		wp_script_add_data(self::LOADER_SCRIPT_HANDLE, 'defer', true);
+		// Loader depends on whichever widget scripts are registered.
+		// This guarantees WordPress loads the widget IIFE before the loader,
+		// so window.NursingShoesSizeAgent / window.ScrubsSizeAgent exist
+		// by the time the loader processes the mount queue.
+		$loader_deps = array();
+		if (!empty($scrubs_url)) {
+			$loader_deps[] = self::SCRUBS_SCRIPT_HANDLE;
+		}
+		if (!empty($shoes_url)) {
+			$loader_deps[] = self::SHOES_SCRIPT_HANDLE;
+		}
+
+		wp_register_script(
+			self::LOADER_SCRIPT_HANDLE,
+			SIZE_AGENT_PLUGIN_URL . 'assets/js/size-agent.js',
+			$loader_deps,
+			SIZE_AGENT_VERSION,
+			true
+		);
 	}
 
 	/**
