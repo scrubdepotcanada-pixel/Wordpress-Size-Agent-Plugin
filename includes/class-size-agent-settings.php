@@ -14,6 +14,7 @@ class Size_Agent_Settings {
 
 	public static function get_settings() {
 		$defaults = array(
+			'license_key'              => '',
 			'scrubs_widget_script_url' => '',
 			'scrubs_api_base_url'      => '',
 			'shoes_widget_script_url'  => '',
@@ -46,6 +47,22 @@ class Size_Agent_Settings {
 			'size_agent_settings_group',
 			self::OPTION_KEY,
 			array($this, 'sanitize_settings')
+		);
+
+		// ── License Section ──
+		add_settings_section(
+			'size_agent_license_section',
+			__('License', 'size-agent'),
+			array($this, 'render_license_section_description'),
+			self::PAGE_SLUG
+		);
+
+		add_settings_field(
+			'license_key',
+			__('License Key', 'size-agent'),
+			array($this, 'render_license_key_field'),
+			self::PAGE_SLUG,
+			'size_agent_license_section'
 		);
 
 		// ── Scrubs Agent Section ──
@@ -125,6 +142,7 @@ class Size_Agent_Settings {
 		$current = self::get_settings();
 
 		$output = array(
+			'license_key'              => '',
 			'scrubs_widget_script_url' => '',
 			'scrubs_api_base_url'      => '',
 			'shoes_widget_script_url'  => '',
@@ -132,6 +150,11 @@ class Size_Agent_Settings {
 			'product_page_injection'   => 0,
 			'cleanup_uninstall'        => 0,
 		);
+
+		// License key — sanitize as plain text
+		if (isset($input['license_key'])) {
+			$output['license_key'] = sanitize_text_field(trim($input['license_key']));
+		}
 
 		$url_fields = array(
 			'scrubs_widget_script_url',
@@ -162,6 +185,33 @@ class Size_Agent_Settings {
 		return $output;
 	}
 
+	public function render_license_section_description() {
+		echo '<p>' . esc_html__('Enter your Size Agent license key to activate the widget. Get your key at thewebguys.ca.', 'size-agent') . '</p>';
+	}
+
+	public function render_license_key_field() {
+		$settings = self::get_settings();
+		$key = $settings['license_key'];
+		$has_key = !empty($key);
+		?>
+		<input
+			type="text"
+			class="regular-text"
+			name="<?php echo esc_attr(self::OPTION_KEY); ?>[license_key]"
+			value="<?php echo esc_attr($key); ?>"
+			placeholder="sa_live_xxxxxxxxxxxx"
+		/>
+		<?php if ($has_key): ?>
+			<span style="color: #2a9d8f; font-weight: 600; margin-left: 8px;">✅ License key entered</span>
+		<?php else: ?>
+			<span style="color: #e63946; font-weight: 600; margin-left: 8px;">⚠️ No license key — widget inactive</span>
+		<?php endif; ?>
+		<p class="description">
+			<?php esc_html_e('Your unique license key from The Web Guys. Required to activate the sizing agent.', 'size-agent'); ?>
+		</p>
+		<?php
+	}
+
 	public function render_scrubs_section_description() {
 		echo '<p>' . esc_html__('Configuration for the scrubs/medical apparel sizing agent.', 'size-agent') . '</p>';
 	}
@@ -173,9 +223,7 @@ class Size_Agent_Settings {
 	public function render_scrubs_widget_script_url_field() {
 		$settings = self::get_settings();
 		?>
-		<input
-			type="url"
-			class="regular-text"
+		<input type="url" class="regular-text"
 			name="<?php echo esc_attr(self::OPTION_KEY); ?>[scrubs_widget_script_url]"
 			value="<?php echo esc_attr($settings['scrubs_widget_script_url']); ?>"
 			placeholder="https://scrub-depot-size-agent.vercel.app/size-finder.js"
@@ -187,9 +235,7 @@ class Size_Agent_Settings {
 	public function render_scrubs_api_base_url_field() {
 		$settings = self::get_settings();
 		?>
-		<input
-			type="url"
-			class="regular-text"
+		<input type="url" class="regular-text"
 			name="<?php echo esc_attr(self::OPTION_KEY); ?>[scrubs_api_base_url]"
 			value="<?php echo esc_attr($settings['scrubs_api_base_url']); ?>"
 			placeholder="https://scrub-depot-size-agent.vercel.app"
@@ -201,9 +247,7 @@ class Size_Agent_Settings {
 	public function render_shoes_widget_script_url_field() {
 		$settings = self::get_settings();
 		?>
-		<input
-			type="url"
-			class="regular-text"
+		<input type="url" class="regular-text"
 			name="<?php echo esc_attr(self::OPTION_KEY); ?>[shoes_widget_script_url]"
 			value="<?php echo esc_attr($settings['shoes_widget_script_url']); ?>"
 			placeholder="https://nursing-shoes-size-agent.vercel.app/size-finder.js"
@@ -215,9 +259,7 @@ class Size_Agent_Settings {
 	public function render_shoes_api_base_url_field() {
 		$settings = self::get_settings();
 		?>
-		<input
-			type="url"
-			class="regular-text"
+		<input type="url" class="regular-text"
 			name="<?php echo esc_attr(self::OPTION_KEY); ?>[shoes_api_base_url]"
 			value="<?php echo esc_attr($settings['shoes_api_base_url']); ?>"
 			placeholder="https://nursing-shoes-size-agent.vercel.app"
@@ -230,8 +272,7 @@ class Size_Agent_Settings {
 		$settings = self::get_settings();
 		?>
 		<label>
-			<input
-				type="checkbox"
+			<input type="checkbox"
 				name="<?php echo esc_attr(self::OPTION_KEY); ?>[product_page_injection]"
 				value="1"
 				<?php checked(1, (int) $settings['product_page_injection']); ?>
@@ -245,8 +286,7 @@ class Size_Agent_Settings {
 		$settings = self::get_settings();
 		?>
 		<label>
-			<input
-				type="checkbox"
+			<input type="checkbox"
 				name="<?php echo esc_attr(self::OPTION_KEY); ?>[cleanup_uninstall]"
 				value="1"
 				<?php checked(1, (int) $settings['cleanup_uninstall']); ?>
