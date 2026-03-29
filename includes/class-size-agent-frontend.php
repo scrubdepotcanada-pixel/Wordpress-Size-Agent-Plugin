@@ -18,7 +18,6 @@ class Size_Agent_Frontend {
 	);
 
 	// Tracks whether the widget has already been rendered to avoid duplicates
-	// Static so it works across all instances (shortcode creates its own)
 	private static $rendered = false;
 
 	protected static $frontend_instance = null;
@@ -31,10 +30,8 @@ class Size_Agent_Frontend {
 	}
 
 	public function init() {
-		// Always register assets
 		add_action('wp_enqueue_scripts', array($this, 'register_assets'));
 
-		// Always register ALL hooks — gate logic inside each callback at render time
 		add_action('woocommerce_before_add_to_cart_button', array($this, 'render_product_page_container_once'));
 		add_action('woocommerce_single_product_summary', array($this, 'render_product_page_container_once'), 25);
 		add_action('woocommerce_after_add_to_cart_button', array($this, 'render_product_page_container_once'), 5);
@@ -42,18 +39,17 @@ class Size_Agent_Frontend {
 		add_filter('the_content', array($this, 'inject_into_content'), 50);
 		add_action('wp_footer', array($this, 'inject_via_footer_script'));
 
-		// AJAX handlers must always be registered
 		add_action('wp_ajax_size_agent_render', array($this, 'ajax_render'));
 		add_action('wp_ajax_nopriv_size_agent_render', array($this, 'ajax_render'));
 	}
 
-	/**
-	 * Runtime check — called inside callbacks only, never at boot time.
-	 * By the time a callback fires, the main query is set.
-	 */
 	protected function should_render() {
 		$settings = $this->get_settings();
 		if (empty($settings['product_page_injection'])) {
+			return false;
+		}
+		// Require valid license key
+		if (empty($settings['license_key'])) {
 			return false;
 		}
 		if (function_exists('is_product') && is_product()) {
@@ -76,7 +72,6 @@ class Size_Agent_Frontend {
 		$this->render_product_page_container();
 	}
 
-	// Elementor widget hook
 	public function inject_into_elementor_widget($content, $widget) {
 		if (!$this->should_render()) return $content;
 		if (self::$rendered) return $content;
@@ -88,7 +83,6 @@ class Size_Agent_Frontend {
 		return $content;
 	}
 
-	// the_content filter
 	public function inject_into_content($content) {
 		if (!$this->should_render()) return $content;
 		if (self::$rendered) return $content;
@@ -104,7 +98,6 @@ class Size_Agent_Frontend {
 		return $content;
 	}
 
-	// JavaScript footer injection — nuclear fallback
 	public function inject_via_footer_script() {
 		if (!$this->should_render()) return;
 		if (self::$rendered) return;
@@ -113,7 +106,6 @@ class Size_Agent_Frontend {
 		?>
 		<script>
 		(function() {
-			// Bail if any size agent container already exists on page
 			if (document.getElementById('size-agent-injected')) return;
 			if (document.querySelector('.size-agent-external')) return;
 			if (document.getElementById('ns-size-finder-btn')) return;
@@ -127,7 +119,6 @@ class Size_Agent_Frontend {
 			if (insertAfter && insertAfter.parentNode) {
 				insertAfter.parentNode.insertBefore(container, insertAfter.nextSibling);
 			}
-			// Pass product title from DOM for correct agent detection
 			var productTitle = (
 				document.querySelector('.product_title') ||
 				document.querySelector('h1.elementor-heading-title') ||
@@ -142,7 +133,6 @@ class Size_Agent_Frontend {
 		<?php
 	}
 
-	// AJAX handler for JS injection
 	public function ajax_render() {
 		$product_id    = intval(isset($_GET['product_id']) ? $_GET['product_id'] : 0);
 		$product_title = isset($_GET['product_title']) ? sanitize_text_field(urldecode($_GET['product_title'])) : '';
@@ -152,7 +142,6 @@ class Size_Agent_Frontend {
 			$post = get_post($product_id);
 			setup_postdata($post);
 
-			// Use passed title for agent detection, fallback to WooCommerce product name
 			if (empty($product_title)) {
 				$product = wc_get_product($product_id);
 				if ($product) {
@@ -160,9 +149,9 @@ class Size_Agent_Frontend {
 				}
 			}
 
-			$agent_type   = $this->detect_agent_type($product_title, $product_id);
+			$agent_type      = $this->detect_agent_type($product_title, $product_id);
 			$product_context = $this->get_current_product_context($product_id);
-			$container_id = 'size-agent-ajax-' . $product_id;
+			$container_id    = 'size-agent-ajax-' . $product_id;
 
 			echo $this->render_container($container_id, $product_context);
 			wp_reset_postdata();
@@ -174,12 +163,7 @@ class Size_Agent_Frontend {
 		return Size_Agent_Settings::get_settings();
 	}
 
-	/**
-	 * Detect whether a product is footwear or scrubs based on title and categories.
-	 * Returns 'shoes' or 'scrubs'.
-	 */
 	protected function detect_agent_type($product_title, $product_id = 0) {
-		// Check title first
 		if (!empty($product_title)) {
 			$title_lower = strtolower($product_title);
 			foreach (self::SHOE_KEYWORDS as $keyword) {
@@ -189,7 +173,6 @@ class Size_Agent_Frontend {
 			}
 		}
 
-		// Check product categories as fallback
 		if ($product_id) {
 			$categories = get_the_terms($product_id, 'product_cat');
 			if (is_array($categories) && !is_wp_error($categories)) {
@@ -235,8 +218,6 @@ class Size_Agent_Frontend {
 			: '';
 	}
 
-
-
 	public function register_assets() {
 		wp_register_style(
 			self::STYLE_HANDLE,
@@ -245,7 +226,6 @@ class Size_Agent_Frontend {
 			SIZE_AGENT_VERSION
 		);
 
-		// Register widget scripts first (no dependencies)
 		$scrubs_url = $this->get_widget_script_url('scrubs');
 		if (!empty($scrubs_url)) {
 			wp_register_script(
@@ -268,10 +248,6 @@ class Size_Agent_Frontend {
 			);
 		}
 
-		// Loader depends on whichever widget scripts are registered.
-		// This guarantees WordPress loads the widget IIFE before the loader,
-		// so window.NursingShoesSizeAgent / window.ScrubsSizeAgent exist
-		// by the time the loader processes the mount queue.
 		$loader_deps = array();
 		if (!empty($scrubs_url)) {
 			$loader_deps[] = self::SCRUBS_SCRIPT_HANDLE;
@@ -289,10 +265,6 @@ class Size_Agent_Frontend {
 		);
 	}
 
-	/**
-	 * Enqueue the correct widget script for the given agent type.
-	 * Returns false if the script URL is not configured.
-	 */
 	protected function enqueue_assets($agent_type = 'scrubs') {
 		$widget_script_url = $this->get_widget_script_url($agent_type);
 
@@ -368,10 +340,14 @@ class Size_Agent_Frontend {
 	}
 
 	protected function build_mount_config($product_context = array(), $agent_type = 'scrubs') {
+		$settings    = $this->get_settings();
+		$license_key = !empty($settings['license_key']) ? $settings['license_key'] : '';
+
 		return array(
-			'agentType' => $agent_type,
-			'apiUrl'    => trailingslashit($this->get_api_base_url($agent_type)) . 'api/size',
-			'product'   => array(
+			'agentType'  => $agent_type,
+			'licenseKey' => $license_key,
+			'apiUrl'     => trailingslashit($this->get_api_base_url($agent_type)) . 'api/size',
+			'product'    => array(
 				'id'        => !empty($product_context['id']) ? (int) $product_context['id'] : 0,
 				'title'     => !empty($product_context['title']) ? (string) $product_context['title'] : '',
 				'sku'       => !empty($product_context['sku']) ? (string) $product_context['sku'] : '',
@@ -389,7 +365,6 @@ class Size_Agent_Frontend {
 		);
 
 		if (!$this->enqueue_assets($agent_type)) {
-			// Debug: show a visible message if script URL is not configured
 			if (defined('WP_DEBUG') && WP_DEBUG) {
 				return '<div class="size-agent-status is-error">Size Agent: No widget script URL configured for agent type "' . esc_html($agent_type) . '".</div>';
 			}
