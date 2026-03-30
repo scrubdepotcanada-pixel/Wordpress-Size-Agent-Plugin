@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SIZE_AGENT_VERSION', '1.1.0' );
+define( 'SIZE_AGENT_VERSION', '2.0.0' );
 define( 'SIZE_AGENT_PLUGIN_FILE', __FILE__ );
 define( 'SIZE_AGENT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SIZE_AGENT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
