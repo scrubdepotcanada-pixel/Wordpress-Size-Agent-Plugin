@@ -1,9 +1,9 @@
 .size-agent-external {
     width: 100%;
+    flex-basis: 100%;
     order: -1;
-    margin-bottom: 10px;
+    margin-bottom: 15px;
 }
-
 .size-agent-status {
   padding: 10px 12px;
   border-radius: 6px;
