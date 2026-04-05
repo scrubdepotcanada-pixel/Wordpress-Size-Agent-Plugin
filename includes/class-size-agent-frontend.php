@@ -32,9 +32,8 @@ class Size_Agent_Frontend {
 	public function init() {
 		add_action('wp_enqueue_scripts', array($this, 'register_assets'));
 
-		add_action('woocommerce_before_add_to_cart_button', array($this, 'render_product_page_container_once'));
+		add_action('woocommerce_before_add_to_cart_button', array($this, 'render_product_page_container_once'), 10);
 		add_action('woocommerce_single_product_summary', array($this, 'render_product_page_container_once'), 25);
-		add_action('woocommerce_after_add_to_cart_button', array($this, 'render_product_page_container_once'), 5);
 		add_filter('elementor/widget/render_content', array($this, 'inject_into_elementor_widget'), 10, 2);
 		add_filter('the_content', array($this, 'inject_into_content'), 50);
 		add_action('wp_footer', array($this, 'inject_via_footer_script'));
