@@ -3,6 +3,13 @@
     flex-basis: 100%;
     order: -1;
     margin-bottom: 15px;
+    display: block;
+}
+
+/* Force the parent flex container to wrap */
+form.cart,
+.woocommerce-variation-add-to-cart {
+    flex-wrap: wrap;
 }
 .size-agent-status {
   padding: 10px 12px;
