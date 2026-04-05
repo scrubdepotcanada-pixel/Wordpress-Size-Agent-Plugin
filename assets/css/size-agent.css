@@ -1,5 +1,7 @@
 .size-agent-external {
-  margin: 12px 0;
+    width: 100%;
+    order: -1;
+    margin-bottom: 10px;
 }
 
 .size-agent-status {
