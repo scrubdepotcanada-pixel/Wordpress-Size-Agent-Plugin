@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Size Agent
  * Description: AI-powered sizing widget for WooCommerce — supports scrubs and footwear.
- * Version: 2.0.6
+ * Version: 2.0.7
  * Author: Size Agent
  * Text Domain: size-agent
  * Requires at least: 6.0
