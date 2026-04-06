@@ -72,13 +72,16 @@ class Size_Agent_Frontend {
 		$this->render_product_page_container();
 	}
 
+	/**
+	 * Elementor injection — PREPEND widget above the add-to-cart form
+	 */
 	public function inject_into_elementor_widget($content, $widget) {
 		if (!$this->should_render()) return $content;
 		if (self::$rendered) return $content;
 		$name = $widget->get_name();
 		if ($name === 'woocommerce-product-add-to-cart' || $name === 'add-to-cart') {
 			self::$rendered = true;
-			$content .= do_shortcode('[size_agent]');
+			$content = do_shortcode('[size_agent]') . $content;
 		}
 		return $content;
 	}
@@ -90,7 +93,10 @@ class Size_Agent_Frontend {
 		if (strpos($content, '[size_agent]') !== false) return $content;
 		self::$rendered = true;
 		$widget_html = do_shortcode('[size_agent]');
-		if (strpos($content, '</form>') !== false) {
+		if (strpos($content, '<form') !== false) {
+			// Insert BEFORE the form (above add-to-cart)
+			$content = preg_replace('/(<form[^>]*class="[^"]*cart[^"]*")/i', $widget_html . '$1', $content, 1);
+		} elseif (strpos($content, '</form>') !== false) {
 			$content = preg_replace('/(<\/form>)/i', '$1' . $widget_html, $content, 1);
 		} else {
 			$content .= $widget_html;
@@ -98,6 +104,10 @@ class Size_Agent_Frontend {
 		return $content;
 	}
 
+	/**
+	 * Footer JS fallback — insert widget BEFORE the add-to-cart area
+	 * so it appears below size pills but above quantity + Add to Cart
+	 */
 	public function inject_via_footer_script() {
 		if (!$this->should_render()) return;
 		if (self::$rendered) return;
@@ -109,16 +119,23 @@ class Size_Agent_Frontend {
 			if (document.getElementById('size-agent-injected')) return;
 			if (document.querySelector('.size-agent-external')) return;
 			if (document.getElementById('ns-size-finder-btn')) return;
+
+			// Find the add-to-cart area
 			var target = document.querySelector(
-				'.elementor-add-to-cart, form.cart, .single_add_to_cart_button'
+				'form.cart, .elementor-add-to-cart, .single_add_to_cart_button'
 			);
 			if (!target) return;
+
 			var container = document.createElement('div');
 			container.id = 'size-agent-injected';
-			var insertAfter = target.closest('form') || target.closest('.elementor-widget') || target;
-			if (insertAfter && insertAfter.parentNode) {
-				insertAfter.parentNode.insertBefore(container, insertAfter.nextSibling);
+			container.style.cssText = 'width:100%;margin-bottom:16px;';
+
+			// Insert BEFORE the add-to-cart form/widget (above quantity + button)
+			var insertBefore = target.closest('form') || target.closest('.elementor-widget') || target;
+			if (insertBefore && insertBefore.parentNode) {
+				insertBefore.parentNode.insertBefore(container, insertBefore);
 			}
+
 			var productTitle = (
 				document.querySelector('.product_title') ||
 				document.querySelector('h1.elementor-heading-title') ||
