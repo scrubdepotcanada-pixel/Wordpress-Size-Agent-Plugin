@@ -32,9 +32,12 @@ class Size_Agent_Frontend {
 	public function init() {
 		add_action('wp_enqueue_scripts', array($this, 'register_assets'));
 
-		add_action('woocommerce_before_add_to_cart_button', array($this, 'render_product_page_container_once'));
+		// Primary hook: fires AFTER the variations table (size pills), BEFORE the add-to-cart row
+		add_action('woocommerce_after_variations_table', array($this, 'render_product_page_container_once'));
+		// Fallback hooks in case the primary doesn't fire (non-variable products, etc.)
+		add_action('woocommerce_before_add_to_cart_form', array($this, 'render_product_page_container_once'));
 		add_action('woocommerce_single_product_summary', array($this, 'render_product_page_container_once'), 25);
-		add_action('woocommerce_after_add_to_cart_button', array($this, 'render_product_page_container_once'), 5);
+
 		add_filter('elementor/widget/render_content', array($this, 'inject_into_elementor_widget'), 10, 2);
 		add_filter('the_content', array($this, 'inject_into_content'), 50);
 		add_action('wp_footer', array($this, 'inject_via_footer_script'));
@@ -73,7 +76,7 @@ class Size_Agent_Frontend {
 	}
 
 	/**
-	 * Elementor injection — PREPEND widget above the add-to-cart form
+	 * Elementor injection — PREPEND widget above the add-to-cart form content
 	 */
 	public function inject_into_elementor_widget($content, $widget) {
 		if (!$this->should_render()) return $content;
@@ -94,7 +97,6 @@ class Size_Agent_Frontend {
 		self::$rendered = true;
 		$widget_html = do_shortcode('[size_agent]');
 		if (strpos($content, '<form') !== false) {
-			// Insert BEFORE the form (above add-to-cart)
 			$content = preg_replace('/(<form[^>]*class="[^"]*cart[^"]*")/i', $widget_html . '$1', $content, 1);
 		} elseif (strpos($content, '</form>') !== false) {
 			$content = preg_replace('/(<\/form>)/i', '$1' . $widget_html, $content, 1);
@@ -105,35 +107,53 @@ class Size_Agent_Frontend {
 	}
 
 	/**
-	 * Footer JS fallback — insert widget BEFORE the add-to-cart area
-	 * so it appears below size pills but above quantity + Add to Cart
+	 * Footer JS fallback — repositions widget if it ended up inside the add-to-cart row,
+	 * or injects it fresh if no other method rendered it.
 	 */
 	public function inject_via_footer_script() {
 		if (!$this->should_render()) return;
-		if (self::$rendered) return;
 		$product_id = get_the_ID();
 		$ajax_url = admin_url('admin-ajax.php');
 		?>
 		<script>
 		(function() {
-			if (document.getElementById('size-agent-injected')) return;
-			if (document.querySelector('.size-agent-external')) return;
+			// ── Phase 1: Reposition if widget already exists but is in the wrong spot ──
+			var existing = document.querySelector('.size-agent-external, #size-agent-injected');
+			if (existing) {
+				var addToCartRow = existing.closest('.woocommerce-variation-add-to-cart, .variations_button');
+				if (addToCartRow) {
+					// Widget is INSIDE the add-to-cart row — move it BEFORE that row
+					addToCartRow.parentNode.insertBefore(existing, addToCartRow);
+					existing.style.width = '100%';
+					existing.style.marginBottom = '16px';
+				}
+				return; // Widget exists and is now positioned correctly
+			}
+
+			// ── Phase 2: No widget rendered at all — inject via AJAX as last resort ──
 			if (document.getElementById('ns-size-finder-btn')) return;
 
-			// Find the add-to-cart area
-			var target = document.querySelector(
-				'form.cart, .elementor-add-to-cart, .single_add_to_cart_button'
-			);
-			if (!target) return;
+			// Find the best insertion point
+			var variationsTable = document.querySelector('table.variations');
+			var singleVariationWrap = document.querySelector('.single_variation_wrap');
+			var addToCartDiv = document.querySelector('.woocommerce-variation-add-to-cart');
+			var form = document.querySelector('form.cart');
 
 			var container = document.createElement('div');
 			container.id = 'size-agent-injected';
 			container.style.cssText = 'width:100%;margin-bottom:16px;';
 
-			// Insert BEFORE the add-to-cart form/widget (above quantity + button)
-			var insertBefore = target.closest('form') || target.closest('.elementor-widget') || target;
-			if (insertBefore && insertBefore.parentNode) {
-				insertBefore.parentNode.insertBefore(container, insertBefore);
+			// Priority: after variations table > before single_variation_wrap > before add-to-cart div > before form
+			if (variationsTable && variationsTable.parentNode) {
+				variationsTable.parentNode.insertBefore(container, variationsTable.nextSibling);
+			} else if (singleVariationWrap && singleVariationWrap.parentNode) {
+				singleVariationWrap.parentNode.insertBefore(container, singleVariationWrap);
+			} else if (addToCartDiv && addToCartDiv.parentNode) {
+				addToCartDiv.parentNode.insertBefore(container, addToCartDiv);
+			} else if (form && form.parentNode) {
+				form.parentNode.insertBefore(container, form);
+			} else {
+				return; // No suitable target found
 			}
 
 			var productTitle = (
